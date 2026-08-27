@@ -18,19 +18,36 @@ esac
 BIN="$(mktemp -d)/chattui"
 URL="$REPO/releases/latest/download/chattui-$asset"
 
+ensure_cargo() {
+  if command -v cargo >/dev/null 2>&1; then
+    return 0
+  fi
+  echo ">> cargo not found, bootstrapping Rust via rustup..."
+  local rustup_init; rustup_init="$(mktemp)"
+  if ! curl -fsSL https://sh.rustup.rs -o "$rustup_init"; then
+    echo "!! could not download rustup installer; install Rust manually: https://rustup.rs" >&2
+    return 1
+  fi
+  sh "$rustup_init" -y --profile minimal 1>/dev/null 2>&1
+  rm -f "$rustup_init"
+  # shellcheck disable=SC1091
+  . "$HOME/.cargo/env" || true
+  command -v cargo >/dev/null 2>&1
+}
+
 fetch_binary() {
   if [ -n "$asset" ] && curl -fsSL "$URL" -o "$BIN" 2>/dev/null; then
     chmod +x "$BIN"; return 0
   fi
-  if command -v cargo >/dev/null 2>&1; then
-    echo ">> no prebuilt binary for $(uname -s)-$(uname -m), building from source..."
-    local dir; dir="$(mktemp -d)"
-    git clone --depth 1 "$REPO" "$dir/src" >/dev/null 2>&1
-    (cd "$dir/src" && cargo build --release -p chattui)
-    cp "$dir/src/target/release/chattui" "$BIN"; return 0
+  echo ">> no prebuilt binary for $(uname -s)-$(uname -m) or download failed; falling back to source build... (installs Rust if missing)"
+  if ! ensure_cargo; then
+    echo "!! could not download binary and could not install Rust for source build" >&2
+    exit 1
   fi
-  echo "!! could not download binary and cargo not found for source build" >&2
-  exit 1
+  local dir; dir="$(mktemp -d)"
+  git clone --depth 1 "$REPO" "$dir/src" >/dev/null 2>&1
+  (cd "$dir/src" && cargo build --release -p chattui)
+  cp "$dir/src/target/release/chattui" "$BIN"; return 0
 }
 
 echo ">> chattui: nick=$NICK  server=$HOST"
