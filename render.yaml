@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: tokio-server-chat
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
